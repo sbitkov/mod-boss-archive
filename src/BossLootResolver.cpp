@@ -1,8 +1,7 @@
 #include "BossLootResolver.h"
+#include "ArchiveEligibility.h"
 
 #include "DatabaseEnv.h"
-#include "ItemTemplate.h"
-#include "ObjectMgr.h"
 #include "QueryResult.h"
 
 BossLootResolver::ItemSet BossLootResolver::ResolveBossLoot(
@@ -86,7 +85,7 @@ void BossLootResolver::ResolveCreatureLoot(
         if (questRequired)
             continue;
 
-        if (IsArchiveEligibleItem(itemEntry))
+        if (BossArchive::IsArchiveEligible(itemEntry))
             result.insert(itemEntry);
     }
     while (lootResult->NextRow());
@@ -163,19 +162,9 @@ void BossLootResolver::ResolveReferenceLoot(
         if (questRequired)
             continue;
 
-        if (IsArchiveEligibleItem(itemEntry))
+        if (BossArchive::IsArchiveEligible(itemEntry))
             result.insert(itemEntry);
     }
     while (referenceResult->NextRow());
 }
 
-bool BossLootResolver::IsArchiveEligibleItem(uint32 itemEntry)
-{
-    ItemTemplate const* itemTemplate =
-        sObjectMgr->GetItemTemplate(itemEntry);
-
-    if (!itemTemplate)
-        return false;
-
-    return itemTemplate->InventoryType != INVTYPE_NON_EQUIP;
-}

@@ -23,6 +23,6 @@ CREATE TABLE IF NOT EXISTS `character_boss_archive_copy` (
     `item_guid` INT UNSIGNED NOT NULL,
     `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    PRIMARY KEY (`guid`, `item_entry`),
-    UNIQUE KEY `uk_archive_item_guid` (`item_guid`)
+    PRIMARY KEY (`item_guid`),
+    KEY `idx_archive_owner_entry` (`guid`, `item_entry`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -1,0 +1,6 @@
+## Interface: 30300
+## Title: Boss Archive
+## Notes: Archive interface for mod-boss-archive
+## Version: 0.2-dev
+
+BossArchive.lua

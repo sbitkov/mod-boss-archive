@@ -1,4 +1,5 @@
 #include "BossLootResolver.h"
+#include "ArchiveService.h"
 
 #include "Chat.h"
 #include "CommandScript.h"
@@ -188,158 +189,69 @@ public:
             return false;
         }
 
-        uint32 guid = player->GetGUID().GetCounter();
-
-        QueryResult unlockResult = CharacterDatabase.Query(
-            "SELECT 1 "
-            "FROM character_boss_archive_item "
-            "WHERE guid = {} "
-            "AND item_entry = {} "
-            "LIMIT 1",
-            guid,
-            itemEntry
-        );
-
-        if (!unlockResult)
-        {
-            handler->PSendSysMessage(
-                "Boss Archive: item {} is not unlocked.",
-                itemEntry
-            );
-
-            return true;
-        }
+        BossArchive::CreateCopyOutcome outcome =
+            BossArchive::CreateArchiveCopy(player, itemEntry);
 
         ItemTemplate const* itemTemplate =
             sObjectMgr->GetItemTemplate(itemEntry);
 
-        if (!itemTemplate)
+        switch (outcome.result)
         {
-            handler->PSendSysMessage(
-                "Boss Archive: item template {} not found.",
-                itemEntry
-            );
-
-            return true;
-        }
-
-        QueryResult copyResult = CharacterDatabase.Query(
-            "SELECT item_guid "
-            "FROM character_boss_archive_copy "
-            "WHERE guid = {} "
-            "AND item_entry = {} "
-            "LIMIT 1",
-            guid,
-            itemEntry
-        );
-
-        if (copyResult)
-        {
-            Field* fields = copyResult->Fetch();
-            uint32 itemGuid = fields[0].Get<uint32>();
-
-            ObjectGuid archiveItemGuid =
-                ObjectGuid::Create<HighGuid::Item>(itemGuid);
-
-            Item* archiveItem =
-                player->GetItemByGuid(archiveItemGuid);
-
-            if (archiveItem)
-            {
-                handler->PSendSysMessage(
-                    "Boss Archive: archive copy of {} - {} already exists (item guid {}).",
-                    itemEntry,
-                    itemTemplate->Name1,
-                    itemGuid
-                );
+            case BossArchive::CreateCopyResult::SUCCESS:
+                if (itemTemplate)
+                {
+                    handler->PSendSysMessage(
+                        "Boss Archive: created archive copy of {} - {} (item guid {}).",
+                        itemEntry,
+                        itemTemplate->Name1,
+                        outcome.itemGuid
+                    );
+                }
+                else
+                {
+                    handler->PSendSysMessage(
+                        "Boss Archive: created archive copy of {} (item guid {}).",
+                        itemEntry,
+                        outcome.itemGuid
+                    );
+                }
 
                 return true;
-            }
 
-            CharacterDatabase.Execute(
-                "DELETE FROM character_boss_archive_copy "
-                "WHERE guid = {} "
-                "AND item_entry = {}",
-                guid,
-                itemEntry
-            );
+            case BossArchive::CreateCopyResult::NOT_UNLOCKED:
+                handler->PSendSysMessage(
+                    "Boss Archive: item {} is not unlocked.",
+                    itemEntry
+                );
+                return true;
 
-            handler->PSendSysMessage(
-                "Boss Archive: previous copy of {} - {} no longer exists; restoring it.",
-                itemEntry,
-                itemTemplate->Name1
-            );
+            case BossArchive::CreateCopyResult::ITEM_TEMPLATE_NOT_FOUND:
+                handler->PSendSysMessage(
+                    "Boss Archive: item template {} not found.",
+                    itemEntry
+                );
+                return true;
+
+            case BossArchive::CreateCopyResult::CANNOT_STORE:
+                handler->SendSysMessage(
+                    "Boss Archive: unable to create archive copy."
+                );
+                return true;
+
+            case BossArchive::CreateCopyResult::CREATE_FAILED:
+                handler->SendSysMessage(
+                    "Boss Archive: failed to create item."
+                );
+                return true;
+
+            case BossArchive::CreateCopyResult::INVALID_PLAYER:
+                handler->SendSysMessage(
+                    "Boss Archive: player not found."
+                );
+                return false;
         }
 
-        ItemPosCountVec dest;
-
-        InventoryResult msg = player->CanStoreNewItem(
-            NULL_BAG,
-            NULL_SLOT,
-            dest,
-            itemEntry,
-            1
-        );
-
-        if (msg != EQUIP_ERR_OK)
-        {
-            player->SendEquipError(
-                msg,
-                nullptr,
-                nullptr,
-                itemEntry
-            );
-
-            handler->SendSysMessage(
-                "Boss Archive: unable to create archive copy."
-            );
-
-            return true;
-        }
-
-        Item* item = player->StoreNewItem(
-            dest,
-            itemEntry,
-            true
-        );
-
-        if (!item)
-        {
-            handler->SendSysMessage(
-                "Boss Archive: failed to create item."
-            );
-
-            return true;
-        }
-
-        item->SetBinding(true);
-
-        uint32 itemGuid = item->GetGUID().GetCounter();
-
-        CharacterDatabase.Execute(
-            "INSERT INTO character_boss_archive_copy "
-            "(guid, item_entry, item_guid) "
-            "VALUES ({}, {}, {})",
-            guid,
-            itemEntry,
-            itemGuid
-        );
-
-        player->SendNewItem(
-            item,
-            1,
-            true,
-            false
-        );
-
-        handler->PSendSysMessage(
-            "Boss Archive: created archive copy of {} - {} (item guid {}).",
-            itemEntry,
-            itemTemplate->Name1,
-            itemGuid
-        );
-
-        return true;
+        return false;
     }
     static bool HandleArchiveCommand(ChatHandler* handler)
     {

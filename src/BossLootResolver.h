@@ -9,7 +9,7 @@ class BossLootResolver
 public:
     using ItemSet = std::unordered_set<uint32>;
 
-    // Returns every equippable item that belongs to the boss loot table
+    // Returns every archive-eligible item that belongs to the boss loot table
     // for the specified loot mode.
     static ItemSet ResolveBossLoot(uint32 bossEntry, uint16 lootMode);
 
@@ -28,6 +28,4 @@ private:
         ItemSet& result,
         std::unordered_set<uint64>& visitedReferences
     );
-
-    static bool IsArchiveEligibleItem(uint32 itemEntry);
 };
