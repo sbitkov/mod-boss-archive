@@ -1,4 +1,5 @@
 #include "BossLootResolver.h"
+#include "ArchiveService.h"
 
 #include "Chat.h"
 #include "Creature.h"
@@ -40,11 +41,12 @@ public:
 
         for (uint32 itemEntry : items)
         {
-            CharacterDatabase.Execute(
-                "INSERT IGNORE INTO character_boss_archive_item "
-                "(guid, boss_entry, loot_mode, item_entry) "
-                "VALUES ({}, {}, {}, {})",
-                guid, bossEntry, lootMode, itemEntry
+            BossArchive::UnlockItem(
+                killer,
+                itemEntry,
+                BossArchive::ArchiveSourceType::BOSS,
+                bossEntry,
+                lootMode
             );
         }
 

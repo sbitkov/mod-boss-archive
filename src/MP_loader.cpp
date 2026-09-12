@@ -2,6 +2,7 @@ void AddBossArchivePlayerScripts();
 void AddBossArchiveCommandScripts();
 void AddBossArchiveSpellScripts();
 void AddBossArchiveProtocolScripts();
+void AddBossArchiveQuestScripts();
 
 void Addmod_boss_archiveScripts()
 {
@@ -9,4 +10,5 @@ void Addmod_boss_archiveScripts()
     AddBossArchiveCommandScripts();
     AddBossArchiveSpellScripts();
     AddBossArchiveProtocolScripts();
+    AddBossArchiveQuestScripts();
 }

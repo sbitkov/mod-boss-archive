@@ -11,6 +11,22 @@ namespace BossArchive
 {
     constexpr uint32 ARCHIVE_PAGE_SIZE = 10;
 
+    enum class ArchiveSourceType : uint8
+    {
+        BOSS = 1,
+        QUEST = 2,
+        CRAFT = 3,
+        VENDOR = 4
+    };
+
+    bool UnlockItem(
+        Player* player,
+        uint32 itemEntry,
+        ArchiveSourceType sourceType,
+        uint32 sourceEntry,
+        uint32 sourceContext = 0
+    );
+
     enum class CreateCopyResult : uint8
     {
         SUCCESS = 0,

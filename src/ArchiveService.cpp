@@ -1,4 +1,5 @@
 #include "ArchiveService.h"
+#include "ArchiveEligibility.h"
 
 #include "DatabaseEnv.h"
 #include "Item.h"
@@ -14,6 +15,35 @@
 
 namespace BossArchive
 {
+    bool UnlockItem(
+        Player* player,
+        uint32 itemEntry,
+        ArchiveSourceType sourceType,
+        uint32 sourceEntry,
+        uint32 sourceContext)
+    {
+        if (!player)
+            return false;
+
+        if (!IsArchiveEligible(itemEntry))
+            return false;
+
+        uint32 guid = player->GetGUID().GetCounter();
+
+        CharacterDatabase.Execute(
+            "INSERT IGNORE INTO character_archive_item "
+            "(guid, item_entry, source_type, source_entry, source_context) "
+            "VALUES ({}, {}, {}, {}, {})",
+            guid,
+            itemEntry,
+            static_cast<uint8>(sourceType),
+            sourceEntry,
+            sourceContext
+        );
+
+        return true;
+    }
+
     CreateCopyOutcome CreateArchiveCopy(Player* player, uint32 itemEntry)
     {
         CreateCopyOutcome outcome;
@@ -28,7 +58,7 @@ namespace BossArchive
 
         QueryResult unlockResult = CharacterDatabase.Query(
             "SELECT 1 "
-            "FROM character_boss_archive_item "
+            "FROM character_archive_item "
             "WHERE guid = {} "
             "AND item_entry = {} "
             "LIMIT 1",
@@ -179,7 +209,7 @@ namespace BossArchive
 
         QueryResult itemResult = CharacterDatabase.Query(
             "SELECT DISTINCT item_entry "
-            "FROM character_boss_archive_item "
+            "FROM character_archive_item "
             "WHERE guid = {}",
             guid
         );

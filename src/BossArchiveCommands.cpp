@@ -116,12 +116,14 @@ public:
 
         QueryResult itemResult = CharacterDatabase.Query(
             "SELECT item_entry "
-            "FROM character_boss_archive_item "
+            "FROM character_archive_item "
             "WHERE guid = {} "
-            "AND boss_entry = {} "
-            "AND loot_mode = {} "
+            "AND source_type = {} "
+            "AND source_entry = {} "
+            "AND source_context = {} "
             "ORDER BY item_entry",
             guid,
+            static_cast<uint8>(BossArchive::ArchiveSourceType::BOSS),
             bossEntry,
             lootMode
         );
