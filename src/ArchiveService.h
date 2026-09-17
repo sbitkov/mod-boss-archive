@@ -6,6 +6,7 @@
 #include <vector>
 
 class Player;
+class Item;
 
 namespace BossArchive
 {
@@ -16,7 +17,8 @@ namespace BossArchive
         BOSS = 1,
         QUEST = 2,
         CRAFT = 3,
-        VENDOR = 4
+        VENDOR = 4,
+        WORLD = 5
     };
 
     bool UnlockItem(
@@ -27,6 +29,8 @@ namespace BossArchive
         uint32 sourceContext = 0
     );
 
+    bool UnlockVariant(Player* player, Item* item);
+
     enum class CreateCopyResult : uint8
     {
         SUCCESS = 0,
@@ -34,7 +38,9 @@ namespace BossArchive
         NOT_UNLOCKED,
         ITEM_TEMPLATE_NOT_FOUND,
         CANNOT_STORE,
-        CREATE_FAILED
+        CREATE_FAILED,
+        VARIANT_NOT_UNLOCKED,
+        VARIANT_SELECTION_REQUIRED
     };
 
     struct CreateCopyOutcome
@@ -71,7 +77,8 @@ namespace BossArchive
 
     CreateCopyOutcome CreateArchiveCopy(
         Player* player,
-        uint32 itemEntry
+        uint32 itemEntry,
+        int32 randomPropertyId = 0
     );
 
     ArchiveQueryResult QueryArchiveItems(
@@ -79,5 +86,16 @@ namespace BossArchive
         uint32 page,
         ArchiveRarityFilter rarity,
         std::string const& search
+    );
+    
+    struct ArchiveVariant
+    {
+        int32 randomPropertyId = 0;
+        uint32 suffixFactor = 0;
+    };
+    
+    std::vector<ArchiveVariant> GetArchiveVariants(
+        Player* player,
+        uint32 itemEntry
     );
 }

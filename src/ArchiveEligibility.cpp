@@ -7,33 +7,27 @@ namespace BossArchive
 {
     bool IsArchiveEligible(uint32 itemEntry)
     {
-        ItemTemplate const* itemTemplate =
-            sObjectMgr->GetItemTemplate(itemEntry);
-
+        ItemTemplate const* itemTemplate = sObjectMgr->GetItemTemplate(itemEntry);
         if (!itemTemplate)
             return false;
 
+        // Archive stores only uncommon-or-better items.
         if (itemTemplate->Quality < ITEM_QUALITY_UNCOMMON)
             return false;
 
-        if (itemTemplate->Class == ITEM_CLASS_CONSUMABLE)
-            return false;
-
-        if (itemTemplate->Class == ITEM_CLASS_RECIPE)
-            return false;
-
-        if (itemTemplate->Class == ITEM_CLASS_KEY)
-            return false;
-
+        // Do not allow Archive copies to become repeatable quest starters.
         if (itemTemplate->StartQuest != 0)
             return false;
 
-        if (itemTemplate->Class == ITEM_CLASS_MISC &&
-            itemTemplate->SubClass == ITEM_SUBCLASS_JUNK_MOUNT)
+        switch (itemTemplate->Class)
         {
-            return false;
-        }
+            case ITEM_CLASS_WEAPON:
+            case ITEM_CLASS_ARMOR:
+            case ITEM_CLASS_MISC:
+                return true;
 
-        return true;
+            default:
+                return false;
+        }
     }
 }

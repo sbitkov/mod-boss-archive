@@ -5,6 +5,7 @@
 #include "ScriptMgr.h"
 #include "SharedDefines.h"
 #include "WorldPacket.h"
+#include "DBCStores.h"
 
 #include <sstream>
 #include <string>
@@ -151,6 +152,7 @@ namespace
         }
 
         uint32 itemEntry = 0;
+        int32 randomPropertyId = 0;
 
         try
         {
@@ -167,11 +169,32 @@ namespace
 
             return;
         }
+        
+        if (parts.size() >= 3)
+        {
+            try
+            {
+                randomPropertyId = static_cast<int32>(
+                    std::stol(parts[2])
+                );
+            }
+            catch (...)
+            {
+                SendArchiveAddonMessage(
+                    player,
+                    "COPY|INVALID_REQUEST|" +
+                        std::to_string(itemEntry)
+                );
+
+                return;
+            }
+        }
 
         BossArchive::CreateCopyOutcome outcome =
             BossArchive::CreateArchiveCopy(
                 player,
-                itemEntry
+                itemEntry,
+                randomPropertyId
             );
 
         switch (outcome.result)
@@ -225,6 +248,74 @@ namespace
                         std::to_string(itemEntry)
                 );
                 return;
+
+            case BossArchive::CreateCopyResult::VARIANT_SELECTION_REQUIRED:
+            {
+                std::vector<BossArchive::ArchiveVariant> variants =
+                    BossArchive::GetArchiveVariants(
+                        player,
+                        itemEntry
+                    );
+
+                SendArchiveAddonMessage(
+                    player,
+                    "VARIANTS_BEGIN|" +
+                        std::to_string(itemEntry) + "|" +
+                        std::to_string(variants.size())
+                );
+
+                for (BossArchive::ArchiveVariant const& variant : variants)
+                {
+                    std::string variantName;
+
+                    if (variant.randomPropertyId > 0)
+                    {
+                        ItemRandomPropertiesEntry const* property =
+                            sItemRandomPropertiesStore.LookupEntry(
+                                static_cast<uint32>(variant.randomPropertyId)
+                            );
+
+                        if (property && property->Name[0])
+                            variantName = property->Name[0];
+                    }
+                    else if (variant.randomPropertyId < 0)
+                    {
+                        ItemRandomSuffixEntry const* suffix =
+                            sItemRandomSuffixStore.LookupEntry(
+                                static_cast<uint32>(-variant.randomPropertyId)
+                            );
+
+                        if (suffix && suffix->Name[0])
+                            variantName = suffix->Name[0];
+                    }
+
+                    SendArchiveAddonMessage(
+                        player,
+                        "VARIANT|" +
+                            std::to_string(itemEntry) + "|" +
+                            std::to_string(variant.randomPropertyId) + "|" +
+                            std::to_string(variant.suffixFactor) + "|" +
+                            variantName
+                    );
+                }
+
+                SendArchiveAddonMessage(
+                    player,
+                    "VARIANTS_END|" +
+                        std::to_string(itemEntry)
+                );
+
+                return;
+            }
+
+            case BossArchive::CreateCopyResult::VARIANT_NOT_UNLOCKED:
+                SendArchiveAddonMessage(
+                    player,
+                    "COPY|VARIANT_NOT_UNLOCKED|" +
+                        std::to_string(itemEntry)
+                );
+                return;
+
         }
     }
 }

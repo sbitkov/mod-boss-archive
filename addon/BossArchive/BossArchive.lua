@@ -12,6 +12,9 @@ local currentRarity = "ALL"
 local selectedItemEntry = nil
 local selectedRow = nil
 
+local pendingVariantItemEntry = nil
+local pendingVariants = {}
+
 local function Split(text, delimiter)
     local result = {}
     local startPos = 1
@@ -70,10 +73,23 @@ local function SendListRequest(page)
     )
 end
 
-local function SendCopyRequest(itemEntry)
+local function SendCopyRequest(
+    itemEntry,
+    randomPropertyId
+)
+    local payload =
+        "COPY|" .. itemEntry
+
+    if randomPropertyId then
+        payload =
+            payload ..
+            "|" ..
+            randomPropertyId
+    end
+
     SendAddonMessage(
         PREFIX,
-        "COPY|" .. itemEntry,
+        payload,
         "WHISPER",
         UnitName("player")
     )
@@ -602,6 +618,229 @@ getButton:SetScript(
 )
 
 -- ------------------------------------------------------------
+-- Variant selection
+-- ------------------------------------------------------------
+
+local variantFrame = CreateFrame(
+    "Frame",
+    "BossArchiveVariantFrame",
+    frame
+)
+
+variantFrame:SetWidth(260)
+variantFrame:SetHeight(120)
+variantFrame:SetPoint(
+    "LEFT",
+    frame,
+    "RIGHT",
+    8,
+    0
+)
+variantFrame:SetFrameStrata("DIALOG")
+variantFrame:SetClampedToScreen(true)
+
+variantFrame:SetBackdrop({
+    bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+    edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+    tile = true,
+    tileSize = 32,
+    edgeSize = 32,
+    insets = {
+        left = 11,
+        right = 12,
+        top = 12,
+        bottom = 11
+    }
+})
+
+variantFrame:Hide()
+
+local variantTitle = variantFrame:CreateFontString(
+    nil,
+    "OVERLAY",
+    "GameFontNormal"
+)
+
+variantTitle:SetPoint(
+    "TOP",
+    variantFrame,
+    "TOP",
+    0,
+    -18
+)
+
+variantTitle:SetText("Choose variant")
+
+local variantSubtitle = variantFrame:CreateFontString(
+    nil,
+    "OVERLAY",
+    "GameFontHighlightSmall"
+)
+
+variantSubtitle:SetPoint(
+    "TOPLEFT",
+    variantFrame,
+    "TOPLEFT",
+    22,
+    -42
+)
+
+variantSubtitle:SetPoint(
+    "TOPRIGHT",
+    variantFrame,
+    "TOPRIGHT",
+    -22,
+    -42
+)
+
+variantSubtitle:SetJustifyH("CENTER")
+variantSubtitle:SetText("")
+
+local variantCloseButton = CreateFrame(
+    "Button",
+    nil,
+    variantFrame,
+    "UIPanelCloseButton"
+)
+
+variantCloseButton:SetPoint(
+    "TOPRIGHT",
+    variantFrame,
+    "TOPRIGHT",
+    -5,
+    -5
+)
+
+local variantButtons = {}
+
+local function GetVariantLabel(
+    itemName,
+    randomPropertyId,
+    suffixFactor,
+    variantName
+)
+    if variantName and variantName ~= "" then
+        if itemName and itemName ~= "" then
+            return itemName .. " " .. variantName
+        end
+
+        return variantName
+    end
+
+    if randomPropertyId > 0 then
+        return "Random Property " .. randomPropertyId
+    end
+
+    if randomPropertyId < 0 then
+        local label =
+            "Random Suffix " ..
+            (-randomPropertyId)
+
+        if suffixFactor and suffixFactor ~= 0 then
+            label =
+                label ..
+                " (factor " ..
+                suffixFactor ..
+                ")"
+        end
+
+        return label
+    end
+
+    return itemName or "Base item"
+end
+
+local function ShowVariantSelection(
+    itemEntry,
+    variants
+)
+    for _, button in ipairs(variantButtons) do
+        button:Hide()
+    end
+
+    local itemName =
+        GetItemInfo(itemEntry)
+
+    if not itemName then
+        itemName =
+            "Item " .. itemEntry
+    end
+
+    variantSubtitle:SetText(itemName)
+
+    for i, variant in ipairs(variants) do
+        local button = variantButtons[i]
+
+        if not button then
+            button = CreateFrame(
+                "Button",
+                nil,
+                variantFrame,
+                "UIPanelButtonTemplate"
+            )
+
+            button:SetWidth(210)
+            button:SetHeight(24)
+
+            variantButtons[i] = button
+        end
+
+        button:ClearAllPoints()
+
+        button:SetPoint(
+            "TOP",
+            variantFrame,
+            "TOP",
+            0,
+            -62 - ((i - 1) * 28)
+        )
+
+        button:SetText(
+            GetVariantLabel(
+                itemName,
+                variant.randomPropertyId,
+                variant.suffixFactor,
+                variant.variantName
+            )
+        )
+
+        local chosenItemEntry = itemEntry
+        local chosenRandomPropertyId =
+            variant.randomPropertyId
+
+        button:SetScript(
+            "OnClick",
+            function()
+                statusLabel:SetTextColor(
+                    1,
+                    1,
+                    1
+                )
+
+                statusLabel:SetText(
+                    "Requesting variant..."
+                )
+
+                variantFrame:Hide()
+
+                SendCopyRequest(
+                    chosenItemEntry,
+                    chosenRandomPropertyId
+                )
+            end
+        )
+
+        button:Show()
+    end
+
+    variantFrame:SetHeight(
+        86 + (#variants * 28)
+    )
+
+    variantFrame:Show()
+end
+
+-- ------------------------------------------------------------
 -- Pagination
 -- ------------------------------------------------------------
 
@@ -900,6 +1139,78 @@ eventFrame:SetScript(
             return
         end
 
+        if parts[1] == "VARIANTS_BEGIN" then
+            pendingVariantItemEntry =
+                tonumber(parts[2])
+
+            pendingVariants = {}
+
+            return
+        end
+
+        if parts[1] == "VARIANT" then
+            local itemEntry =
+                tonumber(parts[2])
+
+            local randomPropertyId =
+                tonumber(parts[3])
+
+            local suffixFactor =
+                tonumber(parts[4]) or 0
+
+            local variantName =
+                parts[5] or ""
+
+            if pendingVariantItemEntry and
+               itemEntry == pendingVariantItemEntry and
+               randomPropertyId then
+
+                table.insert(
+                    pendingVariants,
+                    {
+                        randomPropertyId =
+                            randomPropertyId,
+                        suffixFactor =
+                            suffixFactor,
+                        variantName =
+                            variantName
+                    }
+                )
+            end
+
+            return
+        end
+
+        if parts[1] == "VARIANTS_END" then
+            local itemEntry =
+                tonumber(parts[2])
+
+            if pendingVariantItemEntry and
+               itemEntry == pendingVariantItemEntry and
+               #pendingVariants > 0 then
+
+                ShowVariantSelection(
+                    pendingVariantItemEntry,
+                    pendingVariants
+                )
+            else
+                statusLabel:SetTextColor(
+                    1.0,
+                    0.3,
+                    0.3
+                )
+
+                statusLabel:SetText(
+                    "No archive variants available."
+                )
+            end
+
+            pendingVariantItemEntry = nil
+            pendingVariants = {}
+
+            return
+        end
+
         if parts[1] == "COPY" then
             local result = parts[2]
 
@@ -947,6 +1258,13 @@ eventFrame:SetScript(
             if result == "CREATE_FAILED" then
                 statusLabel:SetText(
                     "Failed to create item."
+                )
+                return
+            end
+
+            if result == "VARIANT_NOT_UNLOCKED" then
+                statusLabel:SetText(
+                    "Archive variant is not unlocked."
                 )
                 return
             end

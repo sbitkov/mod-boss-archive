@@ -3,6 +3,8 @@ void AddBossArchiveCommandScripts();
 void AddBossArchiveSpellScripts();
 void AddBossArchiveProtocolScripts();
 void AddBossArchiveQuestScripts();
+void AddBossArchiveCraftScripts();
+void AddBossArchiveWorldScripts();
 
 void Addmod_boss_archiveScripts()
 {
@@ -11,4 +13,6 @@ void Addmod_boss_archiveScripts()
     AddBossArchiveSpellScripts();
     AddBossArchiveProtocolScripts();
     AddBossArchiveQuestScripts();
+    AddBossArchiveCraftScripts();
+    AddBossArchiveWorldScripts();
 }

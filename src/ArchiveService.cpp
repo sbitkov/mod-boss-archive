@@ -44,7 +44,10 @@ namespace BossArchive
         return true;
     }
 
-    CreateCopyOutcome CreateArchiveCopy(Player* player, uint32 itemEntry)
+    CreateCopyOutcome CreateArchiveCopy(
+    Player* player,
+    uint32 itemEntry,
+    int32 randomPropertyId)
     {
         CreateCopyOutcome outcome;
 
@@ -80,7 +83,46 @@ namespace BossArchive
             outcome.result = CreateCopyResult::ITEM_TEMPLATE_NOT_FOUND;
             return outcome;
         }
+        
+        int32 effectiveRandomPropertyId = randomPropertyId;
 
+        std::vector<ArchiveVariant> variants =
+            GetArchiveVariants(player, itemEntry);
+
+        if (randomPropertyId != 0)
+        {
+            bool variantUnlocked = false;
+
+            for (ArchiveVariant const& variant : variants)
+            {
+                if (variant.randomPropertyId == randomPropertyId)
+                {
+                    variantUnlocked = true;
+                    break;
+                }
+            }
+
+            if (!variantUnlocked)
+            {
+                outcome.result = CreateCopyResult::VARIANT_NOT_UNLOCKED;
+                return outcome;
+            }
+        }
+        else
+        {
+            if (variants.size() == 1)
+            {
+                effectiveRandomPropertyId =
+                    variants.front().randomPropertyId;
+            }
+            else if (variants.size() > 1)
+            {
+                outcome.result =
+                    CreateCopyResult::VARIANT_SELECTION_REQUIRED;
+
+                return outcome;
+            }
+        }
 
         ItemPosCountVec dest;
 
@@ -108,7 +150,8 @@ namespace BossArchive
         Item* item = player->StoreNewItem(
             dest,
             itemEntry,
-            true
+            true,
+            effectiveRandomPropertyId
         );
 
         if (!item)
@@ -313,4 +356,77 @@ namespace BossArchive
 
         return result;
     }
+    
+    bool UnlockVariant(Player* player, Item* item)
+    {
+        if (!player || !item)
+            return false;
+
+        uint32 itemEntry = item->GetEntry();
+
+        if (!IsArchiveEligible(itemEntry))
+            return false;
+
+        int32 randomPropertyId = item->GetItemRandomPropertyId();
+
+        // Non-affix items do not need a secondary variant row.
+        if (randomPropertyId == 0)
+            return true;
+
+        uint32 suffixFactor = item->GetItemSuffixFactor();
+        uint32 guid = player->GetGUID().GetCounter();
+
+        CharacterDatabase.Execute(
+            "INSERT INTO character_archive_variant "
+            "(guid, item_entry, random_property_id, suffix_factor) "
+            "VALUES ({}, {}, {}, {}) "
+            "ON DUPLICATE KEY UPDATE "
+            "suffix_factor = VALUES(suffix_factor)",
+            guid,
+            itemEntry,
+            randomPropertyId,
+            suffixFactor
+        );
+
+        return true;
+    }
+    
+    std::vector<ArchiveVariant> GetArchiveVariants(
+        Player* player,
+        uint32 itemEntry)
+        {
+            std::vector<ArchiveVariant> variants;
+
+            if (!player)
+                return variants;
+
+            uint32 guid = player->GetGUID().GetCounter();
+
+            QueryResult result = CharacterDatabase.Query(
+                "SELECT random_property_id, suffix_factor "
+                "FROM character_archive_variant "
+                "WHERE guid = {} "
+                "AND item_entry = {} "
+                "ORDER BY random_property_id",
+                guid,
+                itemEntry
+            );
+
+            if (!result)
+                return variants;
+
+            do
+            {
+                Field* fields = result->Fetch();
+
+                ArchiveVariant variant;
+                variant.randomPropertyId = fields[0].Get<int32>();
+                variant.suffixFactor = fields[1].Get<uint32>();
+
+                variants.push_back(variant);
+            }
+            while (result->NextRow());
+
+            return variants;
+        }
 }
