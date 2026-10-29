@@ -23,6 +23,18 @@ public:
         if (!killer || !killed)
             return;
 
+        // Temporary diagnostic for the Mograine / Whitemane encounter.
+        // Log before the boss filter to distinguish missing kill hooks from
+        // creatures that are not classified as dungeon bosses.
+        uint32 const killedEntry = killed->GetEntry();
+        if (killedEntry == 3976 || killedEntry == 3977)
+        {
+            ChatHandler(killer->GetSession()).PSendSysMessage(
+                "Boss Archive diagnostic: kill hook, entry = {}, IsDungeonBoss = {}, loot mode = {}",
+                killedEntry, killed->IsDungeonBoss() ? 1 : 0, killed->GetLootMode()
+            );
+        }
+
         if (!killed->IsDungeonBoss())
             return;
 
