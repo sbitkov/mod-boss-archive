@@ -465,7 +465,7 @@ statusLabel:SetPoint(
     frame,
     "TOPRIGHT",
     -30,
-    -120
+    -157
 )
 
 statusLabel:SetJustifyH("RIGHT")
