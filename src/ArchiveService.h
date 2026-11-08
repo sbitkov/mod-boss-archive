@@ -60,6 +60,16 @@ namespace BossArchive
         HEIRLOOM
     };
 
+    enum class ArchiveSourceFilter : uint8
+    {
+        ALL = 0,
+        BOSS = 1,
+        QUEST = 2,
+        CRAFT = 3,
+        VENDOR = 4,
+        WORLD = 5
+    };
+
     struct ArchiveQueryItem
     {
         uint32 itemEntry = 0;
@@ -85,7 +95,8 @@ namespace BossArchive
         Player* player,
         uint32 page,
         ArchiveRarityFilter rarity,
-        std::string const& search
+        std::string const& search,
+        ArchiveSourceFilter source = ArchiveSourceFilter::ALL
     );
     
     struct ArchiveVariant
