@@ -1,4 +1,5 @@
 #include "ArchiveService.h"
+#include "BossIdentification.h"
 
 #include "Creature.h"
 #include "GameObject.h"
@@ -35,7 +36,7 @@ public:
                 return;
 
             // Boss loot already has BOSS provenance.
-            if (creature->IsDungeonBoss() || creature->isWorldBoss())
+            if (BossArchive::IsArchiveDungeonBoss(creature) || creature->isWorldBoss())
                 return;
 
             sourceEntry = creature->GetEntry();
