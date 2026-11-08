@@ -24,6 +24,7 @@ public:
         {
             { "bossloot", HandleBossLootCommand, rbac::RBAC_PERM_COMMAND_SERVER_INFO, Console::No },
             { "archiveboss", HandleArchiveBossCommand, rbac::RBAC_PERM_COMMAND_SERVER_INFO, Console::No },
+            { "unlockboss", HandleUnlockBossCommand, rbac::RBAC_PERM_COMMAND_NPC_ADD, Console::No },
             { "archiveitem", HandleArchiveItemCommand, rbac::RBAC_PERM_COMMAND_SERVER_INFO, Console::No },
             { "archive", HandleArchiveCommand, rbac::RBAC_PERM_COMMAND_SERVER_INFO, Console::No }
         };
@@ -73,6 +74,74 @@ public:
             items.size()
         );
 
+        return true;
+    }
+
+    // GM test helper: simulate the archive side of a boss kill without
+    // spawning or killing a creature. The boss classification check is
+    // intentionally bypassed so unrecognized encounters can be tested.
+    static bool HandleUnlockBossCommand(
+        ChatHandler* handler,
+        uint32 bossEntry,
+        Optional<uint16> lootModeArg)
+    {
+        Player* player = handler->GetPlayer();
+        if (!player)
+        {
+            handler->SendSysMessage("Boss Archive: player not found.");
+            return false;
+        }
+
+        if (!bossEntry || !sObjectMgr->GetCreatureTemplate(bossEntry))
+        {
+            handler->PSendSysMessage(
+                "Boss Archive: unknown creature entry {}.", bossEntry
+            );
+            return true;
+        }
+
+        uint16 lootMode = lootModeArg.value_or(1);
+        if (!lootMode)
+        {
+            handler->SendSysMessage("Boss Archive: loot mode must be nonzero.");
+            return true;
+        }
+
+        BossLootResolver::ItemSet items =
+            BossLootResolver::ResolveBossLoot(bossEntry, lootMode);
+
+        if (items.empty())
+        {
+            handler->PSendSysMessage(
+                "Boss Archive: entry {} has no eligible items for loot mode {}; nothing unlocked.",
+                bossEntry, lootMode
+            );
+            return true;
+        }
+
+        uint32 guid = player->GetGUID().GetCounter();
+
+        CharacterDatabase.Execute(
+            "INSERT IGNORE INTO character_boss_archive "
+            "(guid, boss_entry, loot_mode) VALUES ({}, {}, {})",
+            guid, bossEntry, lootMode
+        );
+
+        for (uint32 itemEntry : items)
+        {
+            BossArchive::UnlockItem(
+                player,
+                itemEntry,
+                BossArchive::ArchiveSourceType::BOSS,
+                bossEntry,
+                lootMode
+            );
+        }
+
+        handler->PSendSysMessage(
+            "Boss Archive: GM unlocked entry {} (loot mode {}), {} eligible items.",
+            bossEntry, lootMode, items.size()
+        );
         return true;
     }
 
