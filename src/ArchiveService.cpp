@@ -10,6 +10,8 @@
 #include <algorithm>
 #include <cctype>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -241,24 +243,106 @@ namespace BossArchive
         Player* player,
         uint32 page,
         ArchiveRarityFilter rarity,
-        std::string const& search)
+        std::string const& search,
+        ArchiveSourceFilter source)
     {
         ArchiveQueryResult result;
-
         if (!player)
             return result;
 
         uint32 guid = player->GetGUID().GetCounter();
 
-        QueryResult itemResult = CharacterDatabase.Query(
-            "SELECT DISTINCT item_entry "
-            "FROM character_archive_item "
-            "WHERE guid = {}",
-            guid
-        );
-
+        // Filter by provenance before collecting items; one item can have
+        // several sources, but appears only once in the result.
+        QueryResult itemResult;
+        if (source == ArchiveSourceFilter::ALL)
+        {
+            itemResult = CharacterDatabase.Query(
+                "SELECT item_entry, source_type, source_entry "
+                "FROM character_archive_item WHERE guid = {}", guid
+            );
+        }
+        else
+        {
+            itemResult = CharacterDatabase.Query(
+                "SELECT item_entry, source_type, source_entry "
+                "FROM character_archive_item WHERE guid = {} AND source_type = {}",
+                guid, static_cast<uint8>(source)
+            );
+        }
         if (!itemResult)
             return result;
+
+        struct Unlock
+        {
+            uint32 itemEntry;
+            uint8 sourceType;
+            uint32 sourceEntry;
+        };
+
+        std::vector<Unlock> unlocks;
+        std::unordered_set<uint32> bossEntries;
+        std::string loweredSearch = ToLower(search);
+
+        do
+        {
+            Field* fields = itemResult->Fetch();
+            Unlock unlock{
+                fields[0].Get<uint32>(),
+                fields[1].Get<uint8>(),
+                fields[2].Get<uint32>()
+            };
+            unlocks.push_back(unlock);
+            if (!loweredSearch.empty() &&
+                unlock.sourceType == static_cast<uint8>(ArchiveSourceType::BOSS))
+            {
+                bossEntries.insert(unlock.sourceEntry);
+            }
+        }
+        while (itemResult->NextRow());
+
+        // Character and world data live in different DB connections.
+        // Resolve boss names in batches instead of one DB query per item.
+        std::unordered_map<uint32, bool> matchingBosses;
+        if (!bossEntries.empty())
+        {
+            std::string idList;
+            uint32 batchCount = 0;
+            auto loadBatch = [&]()
+            {
+                if (idList.empty())
+                    return;
+
+                QueryResult bosses = WorldDatabase.Query(
+                    "SELECT entry, name FROM creature_template WHERE entry IN ({})",
+                    idList
+                );
+                if (bosses)
+                {
+                    do
+                    {
+                        Field* row = bosses->Fetch();
+                        uint32 entry = row[0].Get<uint32>();
+                        std::string name = ToLower(row[1].Get<std::string>());
+                        matchingBosses[entry] =
+                            name.find(loweredSearch) != std::string::npos;
+                    }
+                    while (bosses->NextRow());
+                }
+                idList.clear();
+                batchCount = 0;
+            };
+
+            for (uint32 entry : bossEntries)
+            {
+                if (!idList.empty())
+                    idList += ",";
+                idList += std::to_string(entry);
+                if (++batchCount >= 100)
+                    loadBatch();
+            }
+            loadBatch();
+        }
 
         struct Candidate
         {
@@ -268,95 +352,70 @@ namespace BossArchive
         };
 
         std::vector<Candidate> candidates;
-        std::string loweredSearch = ToLower(search);
-
-        do
+        std::unordered_set<uint32> included;
+        for (Unlock const& unlock : unlocks)
         {
-            Field* fields = itemResult->Fetch();
-            uint32 itemEntry = fields[0].Get<uint32>();
+            if (included.find(unlock.itemEntry) != included.end())
+                continue;
 
             ItemTemplate const* itemTemplate =
-                sObjectMgr->GetItemTemplate(itemEntry);
-
-            // An existing archive unlock is trusted as already eligible.
-            // A missing ItemTemplate cannot be displayed, so skip it.
-            if (!itemTemplate)
+                sObjectMgr->GetItemTemplate(unlock.itemEntry);
+            if (!itemTemplate || !MatchesRarity(itemTemplate, rarity))
                 continue;
 
-            if (!MatchesRarity(itemTemplate, rarity))
-                continue;
+            std::string loweredName = ToLower(itemTemplate->Name1);
+            bool matches = loweredSearch.empty() ||
+                loweredName.find(loweredSearch) != std::string::npos;
 
-            std::string loweredName =
-                ToLower(itemTemplate->Name1);
-
-            if (!loweredSearch.empty() &&
-                loweredName.find(loweredSearch) == std::string::npos)
+            if (!matches &&
+                unlock.sourceType == static_cast<uint8>(ArchiveSourceType::BOSS))
             {
-                continue;
+                auto found = matchingBosses.find(unlock.sourceEntry);
+                matches = (found != matchingBosses.end() && found->second) ||
+                    std::to_string(unlock.sourceEntry) == loweredSearch;
             }
+            if (!matches)
+                continue;
 
+            included.insert(unlock.itemEntry);
             candidates.push_back(
-                {
-                    itemEntry,
-                    itemTemplate->Quality,
-                    std::move(loweredName)
-                }
+                {unlock.itemEntry, itemTemplate->Quality, std::move(loweredName)}
             );
         }
-        while (itemResult->NextRow());
 
-        std::sort(
-            candidates.begin(),
-            candidates.end(),
+        std::sort(candidates.begin(), candidates.end(),
             [](Candidate const& left, Candidate const& right)
             {
                 if (left.sortName != right.sortName)
                     return left.sortName < right.sortName;
-
                 return left.itemEntry < right.itemEntry;
             }
         );
 
-        result.totalCount =
-            static_cast<uint32>(candidates.size());
-
-        if (result.totalCount == 0)
+        result.totalCount = static_cast<uint32>(candidates.size());
+        if (!result.totalCount)
             return result;
 
         result.totalPages =
-            (result.totalCount + ARCHIVE_PAGE_SIZE - 1) /
-            ARCHIVE_PAGE_SIZE;
-
+            (result.totalCount + ARCHIVE_PAGE_SIZE - 1) / ARCHIVE_PAGE_SIZE;
         if (page >= result.totalPages)
             page = result.totalPages - 1;
-
         result.page = page;
 
-        uint32 beginIndex =
-            page * ARCHIVE_PAGE_SIZE;
-
+        uint32 beginIndex = page * ARCHIVE_PAGE_SIZE;
         uint32 endIndex = std::min(
-            beginIndex + ARCHIVE_PAGE_SIZE,
-            result.totalCount
+            beginIndex + ARCHIVE_PAGE_SIZE, result.totalCount
         );
-
         result.items.reserve(endIndex - beginIndex);
 
         for (uint32 index = beginIndex; index < endIndex; ++index)
         {
             Candidate const& candidate = candidates[index];
-
-            result.items.push_back(
-                {
-                    candidate.itemEntry,
-                    candidate.quality
-                }
-            );
+            result.items.push_back({candidate.itemEntry, candidate.quality});
         }
-
         return result;
     }
-    
+
     bool UnlockVariant(Player* player, Item* item)
     {
         if (!player || !item)
