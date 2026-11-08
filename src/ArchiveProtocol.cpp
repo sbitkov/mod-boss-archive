@@ -75,6 +75,21 @@ namespace
         return BossArchive::ArchiveRarityFilter::ALL;
     }
 
+    BossArchive::ArchiveSourceFilter ParseSource(std::string const& value)
+    {
+        if (value == "BOSS")
+            return BossArchive::ArchiveSourceFilter::BOSS;
+        if (value == "QUEST")
+            return BossArchive::ArchiveSourceFilter::QUEST;
+        if (value == "CRAFT")
+            return BossArchive::ArchiveSourceFilter::CRAFT;
+        if (value == "VENDOR")
+            return BossArchive::ArchiveSourceFilter::VENDOR;
+        if (value == "WORLD")
+            return BossArchive::ArchiveSourceFilter::WORLD;
+        return BossArchive::ArchiveSourceFilter::ALL;
+    }
+
     void HandleListRequest(
         Player* player,
         std::vector<std::string> const& parts)
@@ -105,12 +120,18 @@ namespace
         if (parts.size() >= 4)
             search = parts[3];
 
+        // The fifth field is optional: older LIST requests default to ALL.
+        BossArchive::ArchiveSourceFilter source =
+            parts.size() >= 5 ? ParseSource(parts[4]) :
+                BossArchive::ArchiveSourceFilter::ALL;
+
         BossArchive::ArchiveQueryResult result =
             BossArchive::QueryArchiveItems(
                 player,
                 page,
                 rarity,
-                search
+                search,
+                source
             );
 
         SendArchiveAddonMessage(
