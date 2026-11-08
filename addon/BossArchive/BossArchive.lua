@@ -193,9 +193,9 @@ local function UpdateSourceTabs()
     for _, tab in ipairs(sourceTabs) do
         local button = tabButtons[tab.value]
         if currentSource == tab.value then
-            button:Disable()
+            button:LockHighlight()
         else
-            button:Enable()
+            button:UnlockHighlight()
         end
     end
 end
@@ -212,6 +212,9 @@ for index, tab in ipairs(sourceTabs) do
     )
     button:SetText(tab.text)
     button:SetScript("OnClick", function()
+        if currentSource == tab.value then
+            return
+        end
         currentSource = tab.value
         UpdateSourceTabs()
         SendListRequest(0)
