@@ -1,4 +1,5 @@
 #include "BossLootResolver.h"
+#include "BossIdentification.h"
 #include "ArchiveService.h"
 
 #include "Chat.h"
@@ -35,7 +36,7 @@ public:
             );
         }
 
-        if (!killed->IsDungeonBoss())
+        if (!BossArchive::IsArchiveDungeonBoss(killed))
             return;
 
         uint32 guid = killer->GetGUID().GetCounter();
