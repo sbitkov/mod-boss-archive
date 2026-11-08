@@ -8,6 +8,7 @@ local pendingItems = {}
 
 local currentSearch = ""
 local currentRarity = "ALL"
+local currentSource = "ALL"
 
 local selectedItemEntry = nil
 local selectedRow = nil
@@ -67,7 +68,9 @@ local function SendListRequest(page)
             "|" ..
             currentRarity ..
             "|" ..
-            currentSearch,
+            currentSearch ..
+            "|" ..
+            currentSource,
         "WHISPER",
         UnitName("player")
     )
@@ -102,7 +105,7 @@ local frame = CreateFrame(
 )
 
 frame:SetWidth(440)
-frame:SetHeight(520)
+frame:SetHeight(575)
 frame:SetPoint("CENTER")
 frame:SetFrameStrata("DIALOG")
 frame:SetMovable(true)
@@ -172,6 +175,55 @@ closeButton:SetPoint(
 )
 
 -- ------------------------------------------------------------
+-- Source tabs
+-- ------------------------------------------------------------
+
+local sourceTabs = {
+    { value = "ALL", text = "All" },
+    { value = "BOSS", text = "Boss" },
+    { value = "QUEST", text = "Quest" },
+    { value = "CRAFT", text = "Craft" },
+    { value = "VENDOR", text = "Vendor" },
+    { value = "WORLD", text = "World" }
+}
+
+local tabButtons = {}
+
+local function UpdateSourceTabs()
+    for _, tab in ipairs(sourceTabs) do
+        local button = tabButtons[tab.value]
+        if currentSource == tab.value then
+            button:LockHighlight()
+        else
+            button:UnlockHighlight()
+        end
+    end
+end
+
+for index, tab in ipairs(sourceTabs) do
+    local button = CreateFrame(
+        "Button", nil, frame, "UIPanelButtonTemplate"
+    )
+    button:SetWidth(61)
+    button:SetHeight(24)
+    button:SetPoint(
+        "TOPLEFT", frame, "TOPLEFT",
+        29 + (index - 1) * 64, -48
+    )
+    button:SetText(tab.text)
+    button:SetScript("OnClick", function()
+        if currentSource == tab.value then
+            return
+        end
+        currentSource = tab.value
+        UpdateSourceTabs()
+        SendListRequest(0)
+    end)
+    tabButtons[tab.value] = button
+end
+UpdateSourceTabs()
+
+-- ------------------------------------------------------------
 -- Search
 -- ------------------------------------------------------------
 
@@ -189,7 +241,7 @@ searchBox:SetPoint(
     frame,
     "TOPLEFT",
     32,
-    -52
+    -86
 )
 
 searchBox:SetAutoFocus(false)
@@ -209,7 +261,7 @@ searchHint:SetPoint(
     0
 )
 
-searchHint:SetText("Search item name...")
+searchHint:SetText("Search item or boss...")
 
 local function UpdateSearchHint()
     if searchBox:GetText() == "" and not searchBox:HasFocus() then
@@ -310,7 +362,7 @@ rarityLabel:SetPoint(
     frame,
     "TOPLEFT",
     30,
-    -86
+    -122
 )
 
 rarityLabel:SetText("Rarity:")
@@ -400,7 +452,7 @@ countLabel:SetPoint(
     frame,
     "TOPLEFT",
     30,
-    -120
+    -157
 )
 
 countLabel:SetText("0 items")
@@ -416,7 +468,7 @@ statusLabel:SetPoint(
     frame,
     "TOPRIGHT",
     -30,
-    -120
+    -157
 )
 
 statusLabel:SetJustifyH("RIGHT")
@@ -454,7 +506,7 @@ for i = 1, PAGE_SIZE do
             frame,
             "TOPLEFT",
             30,
-            -145
+            -182
         )
     else
         row:SetPoint(
